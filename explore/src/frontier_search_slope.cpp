@@ -173,47 +173,67 @@ Frontier FrontierSearch::buildNewFrontier(unsigned int initial_cell,
   output.centroid.y /= output.size;
   
   // [chad] calculate slope of the frontier
+  double numerator = 0.0;
+  double denominator = 0.0;
+  double slope = 0.0;
 
-  double angles[8] = {0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0};
-  double orientX[8], orientY[8];
-  double orient_dist = 0.35;
-  unsigned int orient_m_x, orient_m_y;
-  int counted_vectors = 0;
-  unsigned int orient_index;
-  double goal_x = 0.0, goal_y = 0.0;
-  double orient_x = 0.0, orient_y = 0.0;
-  for (int i = 0; i < 8; i++){
-      orientY[i] = output.centroid.y + orient_dist * sin(angles[i] * PI / 180.0);
-      orientX[i] = output.centroid.x + orient_dist * cos(angles[i] * PI / 180.0);
-      if (!costmap_->worldToMap(orientX[i], orientY[i], orient_m_x, orient_m_y)){
-        ROS_DEBUG("[Warning] the orient is out of the map bounds %lf", angles[i]);
-	counted_vectors += 1;
-        goal_x += orientX[i];
-        goal_y += orientY[i];
-      }
-      else{
-	    orient_index = costmap_->getIndex(orient_m_x, orient_m_y);
-            if (map_[orient_index] == NO_INFORMATION){
-		counted_vectors += 1;
-		goal_x += orientX[i];
-		goal_y += orientY[i];
-            }
-      }
+  for (int i = 0; i < output.size; i++){
+    numerator += (output.points[i].x - output.centroid.x) * (output.points[i].y - output.centroid.y);
+    denominator += (output.points[i].x - output.centroid.x) * (output.points[i].x - output.centroid.x);
   }
-  if (counted_vectors != 0){
-      goal_x = goal_x / counted_vectors;
-      goal_y = goal_y / counted_vectors;
-      orient_x = goal_x - output.centroid.x;
-      orient_y = goal_y - output.centroid.y;
-      if (goal_x > 0.0){
-	output.theta = atan2(orient_y, orient_x);
-      }
-      else{
-	output.theta = PI + atan2(orient_y, orient_x);
-      }
+  
+  if (denominator == 0){
+    ROS_ERROR("The denominator for calculating slope is ZERO");
   }
   else{
-      ROS_DEBUG("[Warning] no open orients have been detected");
+    slope = numerator / denominator;
+	//orient points are on the perpendicular direction of the slope  	
+	double orient_down_x, orient_down_y;
+        unsigned int m_down_x, m_down_y;
+        int down_flag = 1;
+        unsigned int orient_index;
+        double orient_dist = 0.15;
+        orient_down_x = output.centroid.x + orient_dist * slope / sqrt(1.0 + slope * slope);
+        orient_down_y = output.centroid.x - orient_dist / sqrt(1.0 + slope * slope);
+	
+        if (!costmap_->worldToMap(orient_down_x, orient_down_y, m_down_x, m_down_y)){
+            ROS_DEBUG("[Warning] cells below the frontier is out of costmap bounds, the slope is %d", slope);
+	    // cells below are untouchable
+                if (slope > 0.0 ){
+                  output.theta = atan(-1.0/slope);
+		}
+		else if (slope == 0.0){
+                  output.theta = -PI/2.0;
+		}
+		else{
+		  output.theta = -(PI + atan(1.0/slope));		
+	        }
+        }
+        else {
+	    orient_index = costmap_->getIndex(m_down_x, m_down_y);
+            if (map_[orient_index] == NO_INFORMATION){
+                if (slope > 0.0 ){
+                  output.theta = atan(-1.0/slope);
+		}
+		else if (slope == 0.0){
+                  output.theta = -PI/2.0;
+		}
+		else{
+		  output.theta = -(PI + atan(1.0/slope));		
+	        }
+             }
+	     else {
+                if (slope > 0.0 ){
+                  output.theta = PI + atan(-1.0/slope);
+		}
+		else if (slope == 0.0){
+                  output.theta = PI/2.0;
+		}
+		else{
+		  output.theta = atan(-1.0/slope);		
+		}		
+	     }
+        }
   }
   return output;
 }

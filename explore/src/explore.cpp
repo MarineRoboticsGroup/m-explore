@@ -208,6 +208,7 @@ void Explore::makePlan()
     return;
   }
   geometry_msgs::Point target_position = frontier->centroid;
+  double radYaw = frontier->theta;//in radians
 
   // time out if we are not making any progress
   bool same_goal = prev_goal_ == target_position;
@@ -233,7 +234,18 @@ void Explore::makePlan()
   // send goal to move_base if we have something new to pursue
   move_base_msgs::MoveBaseGoal goal;
   goal.target_pose.pose.position = target_position;
-  goal.target_pose.pose.orientation.w = 1.;
+
+  tf::Quaternion quaternion;
+  quaternion = tf::createQuaternionFromYaw(radYaw);
+
+  geometry_msgs::Quaternion qMsg;
+  tf::quaternionTFToMsg(quaternion, qMsg);
+
+  goal.target_pose.pose.orientation = qMsg;
+  
+  //chad: strip the slash of /map
+  //std::string tf_prefix = tf::getPrefixParam(param_nh);
+  //goal.target_pose.header.frame_id =tf::resolve("/", costmap_client_.getGlobalFrameID());
   goal.target_pose.header.frame_id = costmap_client_.getGlobalFrameID();
   goal.target_pose.header.stamp = ros::Time::now();
   move_base_client_.sendGoal(
