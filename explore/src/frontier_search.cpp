@@ -172,8 +172,9 @@ Frontier FrontierSearch::buildNewFrontier(unsigned int initial_cell,
   output.centroid.x /= output.size;
   output.centroid.y /= output.size;
   
-  // [chad] calculate slope of the frontier
-
+  // [chad] draw eight points around the centroid and then pick any of them which are in free space
+  //        the mean of those free-space points will be in the goal orientation
+  // [chad] averaging angles may lead to ambiguous goals, so we average absolute positions and then calculate orientatioin
   double angles[8] = {0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0};
   double orientX[8], orientY[8];
   double orient_dist = 0.35;
@@ -186,18 +187,18 @@ Frontier FrontierSearch::buildNewFrontier(unsigned int initial_cell,
       orientY[i] = output.centroid.y + orient_dist * sin(angles[i] * PI / 180.0);
       orientX[i] = output.centroid.x + orient_dist * cos(angles[i] * PI / 180.0);
       if (!costmap_->worldToMap(orientX[i], orientY[i], orient_m_x, orient_m_y)){
-        ROS_DEBUG("[Warning] the orient is out of the map bounds %lf", angles[i]);
-	counted_vectors += 1;
+        ROS_DEBUG("[Warning] the orient is out of the map bounds %lf. Reducing orient_dist may prevent this warning", angles[i]);
+	      counted_vectors += 1;
         goal_x += orientX[i];
         goal_y += orientY[i];
       }
       else{
-	    orient_index = costmap_->getIndex(orient_m_x, orient_m_y);
-            if (map_[orient_index] == NO_INFORMATION){
-		counted_vectors += 1;
-		goal_x += orientX[i];
-		goal_y += orientY[i];
-            }
+	      orient_index = costmap_->getIndex(orient_m_x, orient_m_y);
+        if (map_[orient_index] == NO_INFORMATION){
+	        counted_vectors += 1;
+	        goal_x += orientX[i];
+	        goal_y += orientY[i];
+        }
       }
   }
   if (counted_vectors != 0){
@@ -205,11 +206,11 @@ Frontier FrontierSearch::buildNewFrontier(unsigned int initial_cell,
       goal_y = goal_y / counted_vectors;
       orient_x = goal_x - output.centroid.x;
       orient_y = goal_y - output.centroid.y;
-      if (goal_x > 0.0){
-	output.theta = atan2(orient_y, orient_x);
+      if (orient_x != 0.0 || orient_y != 0.0){
+	      output.theta = atan2(orient_y, orient_x);
       }
       else{
-	output.theta = PI + atan2(orient_y, orient_x);
+        ROS_DEBUG("[Warning] both arguments passed to atan2 are zero");
       }
   }
   else{
