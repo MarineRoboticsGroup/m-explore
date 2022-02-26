@@ -17,9 +17,6 @@ struct Frontier {
   geometry_msgs::Point centroid;
   geometry_msgs::Point middle;
   std::vector<geometry_msgs::Point> points;
-  //[chad] the orientation of the frontier
-  double theta;
-
 };
 
 /**
@@ -79,7 +76,6 @@ protected:
    * @return cost of the frontier
    */
   double frontierCost(const Frontier& frontier);
-
 
 private:
   costmap_2d::Costmap2D* costmap_;

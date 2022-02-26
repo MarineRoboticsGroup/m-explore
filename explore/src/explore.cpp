@@ -69,6 +69,10 @@ Explore::Explore()
   private_nh_.param("gain_scale", gain_scale_, 1.0);
   private_nh_.param("min_frontier_size", min_frontier_size, 0.5);
 
+  ros::ServiceServer service = private_nh_.advertiseService("setRevisitWPInProgress", &Explore::setRevisitWPInProgress, this);
+  running_explore_client_ = private_nh_.serviceClient<std_srvs::SetBool>("setFrontierWPInProgress");
+
+
   search_ = frontier_exploration::FrontierSearch(costmap_client_.getCostmap(),
                                                  potential_scale_, gain_scale_,
                                                  min_frontier_size);
@@ -178,82 +182,72 @@ void Explore::visualizeFrontiers(
 
 void Explore::makePlan()
 {
-  // find frontiers
-  auto pose = costmap_client_.getRobotPose();
-  // get frontiers sorted according to cost
-  auto frontiers = search_.searchFrom(pose.position);
-  ROS_DEBUG("found %lu frontiers", frontiers.size());
-  for (size_t i = 0; i < frontiers.size(); ++i) {
-    ROS_DEBUG("frontier %zd cost: %f", i, frontiers[i].cost);
+  if (runExplore) {
+    // find frontiers
+    auto pose = costmap_client_.getRobotPose();
+    // get frontiers sorted according to cost
+    auto frontiers = search_.searchFrom(pose.position);
+    ROS_DEBUG("found %lu frontiers", frontiers.size());
+    for (size_t i = 0; i < frontiers.size(); ++i) {
+      ROS_DEBUG("frontier %zd cost: %f", i, frontiers[i].cost);
+    }
+
+    if (frontiers.empty()) {
+      stop();
+      return;
+    }
+
+    // publish frontiers as visualization markers
+    if (visualize_) {
+      visualizeFrontiers(frontiers);
+    }
+
+    // find non blacklisted frontier
+    auto frontier =
+        std::find_if_not(frontiers.begin(), frontiers.end(),
+                        [this](const frontier_exploration::Frontier& f) {
+                          return goalOnBlacklist(f.centroid);
+                        });
+    if (frontier == frontiers.end()) {
+      stop();
+      return;
+    }
+    geometry_msgs::Point target_position = frontier->centroid;
+
+    // time out if we are not making any progress
+    bool same_goal = prev_goal_ == target_position;
+    prev_goal_ = target_position;
+    if (!same_goal || prev_distance_ > frontier->min_distance) {
+      // we have different goal or we made some progress
+      last_progress_ = ros::Time::now();
+      prev_distance_ = frontier->min_distance;
+    }
+    // black list if we've made no progress for a long time
+    if (ros::Time::now() - last_progress_ > progress_timeout_) {
+      frontier_blacklist_.push_back(target_position);
+      ROS_DEBUG("Adding current goal to black list");
+      makePlan();
+      return;
+    }
+
+    // we don't need to do anything if we still pursuing the same goal
+    if (same_goal) {
+      return;
+    }
+
+    // send goal to move_base if we have something new to pursue
+    move_base_msgs::MoveBaseGoal goal;
+    goal.target_pose.pose.position = target_position;
+    goal.target_pose.pose.orientation.w = 1.;
+    goal.target_pose.header.frame_id = costmap_client_.getGlobalFrameID();
+    goal.target_pose.header.stamp = ros::Time::now();
+    move_base_client_.sendGoal(
+        goal, [this, target_position](
+                  const actionlib::SimpleClientGoalState& status,
+                  const move_base_msgs::MoveBaseResultConstPtr& result) {
+          reachedGoal(status, result, target_position);
+        });
   }
-
-  if (frontiers.empty()) {
-    stop();
-    return;
-  }
-
-  // publish frontiers as visualization markers
-  if (visualize_) {
-    visualizeFrontiers(frontiers);
-  }
-
-  // find non blacklisted frontier
-  auto frontier =
-      std::find_if_not(frontiers.begin(), frontiers.end(),
-                       [this](const frontier_exploration::Frontier& f) {
-                         return goalOnBlacklist(f.centroid);
-                       });
-  if (frontier == frontiers.end()) {
-    stop();
-    return;
-  }
-  geometry_msgs::Point target_position = frontier->centroid;
-  double radYaw = frontier->theta;//in radians
-
-  // time out if we are not making any progress
-  bool same_goal = prev_goal_ == target_position;
-  prev_goal_ = target_position;
-  if (!same_goal || prev_distance_ > frontier->min_distance) {
-    // we have different goal or we made some progress
-    last_progress_ = ros::Time::now();
-    prev_distance_ = frontier->min_distance;
-  }
-  // black list if we've made no progress for a long time
-  if (ros::Time::now() - last_progress_ > progress_timeout_) {
-    frontier_blacklist_.push_back(target_position);
-    ROS_DEBUG("Adding current goal to black list");
-    makePlan();
-    return;
-  }
-
-  // we don't need to do anything if we still pursuing the same goal
-  if (same_goal) {
-    return;
-  }
-
-  // send goal to move_base if we have something new to pursue
-  move_base_msgs::MoveBaseGoal goal;
-  goal.target_pose.pose.position = target_position;
-
-  tf::Quaternion quaternion;
-  quaternion = tf::createQuaternionFromYaw(radYaw);
-
-  geometry_msgs::Quaternion qMsg;
-  tf::quaternionTFToMsg(quaternion, qMsg);
-
-  goal.target_pose.pose.orientation = qMsg;
-  
-  //chad: strip the slash of /map
-  //std::string tf_prefix = tf::getPrefixParam(param_nh);
-  //goal.target_pose.header.frame_id =tf::resolve("/", costmap_client_.getGlobalFrameID());
-  goal.target_pose.header.frame_id = costmap_client_.getGlobalFrameID();
-  goal.target_pose.header.stamp = ros::Time::now();
-  move_base_client_.sendGoal(
-      goal, [this, target_position](
-                const actionlib::SimpleClientGoalState& status,
-                const move_base_msgs::MoveBaseResultConstPtr& result) {
-        reachedGoal(status, result, target_position);
-      });
 }
 
 bool Explore::goalOnBlacklist(const geometry_msgs::Point& goal)
@@ -283,6 +277,12 @@ void Explore::reachedGoal(const actionlib::SimpleClientGoalState& status,
     ROS_DEBUG("Adding current goal to black list");
   }
 
+  runExplore = false; 
+  std_srvs::SetBool srv;
+  srv.request.data = false;
+  running_explore_client_.call(srv);
+
+
   // find new goal immediatelly regardless of planning frequency.
   // execute via timer to prevent dead lock in move_base_client (this is
   // callback for sendGoal, which is called in makePlan). the timer must live
@@ -290,6 +290,12 @@ void Explore::reachedGoal(const actionlib::SimpleClientGoalState& status,
   oneshot_ = relative_nh_.createTimer(
       ros::Duration(0, 0), [this](const ros::TimerEvent&) { makePlan(); },
       true);
+}
+
+bool Explore::setRevisitWPInProgress(std_srvs::SetBool::Request &req, std_srvs::SetBool::Response &res) {
+  runExplore = req.data;
+  res.success = true;
+  return true;
 }
 
 void Explore::start()

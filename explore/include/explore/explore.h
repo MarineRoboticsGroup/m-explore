@@ -45,6 +45,7 @@
 #include <actionlib/client/simple_action_client.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <move_base_msgs/MoveBaseAction.h>
+#include "std_srvs/SetBool.h"
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
 
@@ -108,6 +109,14 @@ private:
   double potential_scale_, orientation_scale_, gain_scale_;
   ros::Duration progress_timeout_;
   bool visualize_;
+
+  // active max-mixtures run flag
+  bool runExplore = true;
+  ros::ServiceClient running_explore_client_;
+
+  // 
+  bool setRevisitWPInProgress(std_srvs::SetBool::Request &req, std_srvs::SetBool::Response &res);
+
 };
 }
 
