@@ -103,6 +103,7 @@ private:
   double prev_distance_;
   ros::Time last_progress_;
   size_t last_markers_count_;
+  size_t wp_count_ = 0;
 
   // parameters
   double planner_frequency_;

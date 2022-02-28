@@ -236,6 +236,13 @@ void Explore::makePlan()
     }
 
     // send goal to move_base if we have something new to pursue
+    wp_count_++; 
+    if (wp_count_ > 5) { // allow for a few pure exploratory wps before running full system
+      runExplore = false; 
+      std_srvs::SetBool srv;
+      srv.request.data = false;
+      running_explore_client_.call(srv);
+    }
     move_base_msgs::MoveBaseGoal goal;
     goal.target_pose.pose.position = target_position;
     goal.target_pose.pose.orientation.w = 1.;
