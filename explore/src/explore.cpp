@@ -238,6 +238,7 @@ void Explore::makePlan()
     // send goal to move_base if we have something new to pursue
     wp_count_++; 
     if (wp_count_ > 5) { // allow for a few pure exploratory wps before running full system
+      ROS_INFO("TURNING OFF EXPLORE MODE");
       runExplore = false; 
       std_srvs::SetBool srv;
       srv.request.data = false;
@@ -300,6 +301,7 @@ void Explore::reachedGoal(const actionlib::SimpleClientGoalState& status,
 }
 
 bool Explore::setRevisitWPInProgress(std_srvs::SetBool::Request &req, std_srvs::SetBool::Response &res) {
+  ROS_INFO("RECVD REVISIT WP SERVICE CALL");
   runExplore = req.data;
   res.success = true;
   return true;
