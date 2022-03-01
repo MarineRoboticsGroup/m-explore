@@ -69,7 +69,7 @@ Explore::Explore()
   private_nh_.param("gain_scale", gain_scale_, 1.0);
   private_nh_.param("min_frontier_size", min_frontier_size, 0.5);
 
-  ros::ServiceServer service = private_nh_.advertiseService("setRevisitWPInProgress", &Explore::setRevisitWPInProgress, this);
+  service = private_nh_.advertiseService("setRevisitWPInProgress", &Explore::setRevisitWPInProgress, this);
   running_explore_client_ = private_nh_.serviceClient<std_srvs::SetBool>("setFrontierWPInProgress");
 
 

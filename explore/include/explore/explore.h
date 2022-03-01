@@ -114,6 +114,7 @@ private:
   // active max-mixtures run flag
   bool runExplore = true;
   ros::ServiceClient running_explore_client_;
+  ros::ServiceServer service; // service to stop exploration
 
   // 
   bool setRevisitWPInProgress(std_srvs::SetBool::Request &req, std_srvs::SetBool::Response &res);
