@@ -242,7 +242,11 @@ void Explore::makePlan()
       runExplore = false; 
       std_srvs::SetBool srv;
       srv.request.data = false;
-      running_explore_client_.call(srv);
+      if(running_explore_client_.call(srv)) {
+        ROS_INFO("EXPLORE MODE OFF, SERVICE CALL SUCCESSFUL");
+      } else {
+        ROS_ERROR("Failed to call service");
+      }
     }
     move_base_msgs::MoveBaseGoal goal;
     goal.target_pose.pose.position = target_position;
@@ -288,7 +292,12 @@ void Explore::reachedGoal(const actionlib::SimpleClientGoalState& status,
   runExplore = false; 
   std_srvs::SetBool srv;
   srv.request.data = false;
-  running_explore_client_.call(srv);
+  if(running_explore_client_.call(srv)) {
+    ROS_INFO("WP REACHED, SERVICE CALL SUCCESSFUL");
+  }
+  else {
+    ROS_ERROR("Failed to call service after wp reached");
+  }
 
 
   // find new goal immediatelly regardless of planning frequency.
