@@ -70,7 +70,7 @@ Explore::Explore()
   private_nh_.param("min_frontier_size", min_frontier_size, 0.5);
 
   service = private_nh_.advertiseService("setRevisitWPInProgress", &Explore::setRevisitWPInProgress, this);
-  running_explore_client_ = private_nh_.serviceClient<std_srvs::SetBool>("setFrontierWPInProgress");
+  running_explore_client_ = private_nh_.serviceClient<std_srvs::SetBool>("/setFrontierWPInProgress");
 
 
   search_ = frontier_exploration::FrontierSearch(costmap_client_.getCostmap(),
@@ -238,6 +238,7 @@ void Explore::makePlan()
     // send goal to move_base if we have something new to pursue
     wp_count_++; 
     if (wp_count_ > 5) { // allow for a few pure exploratory wps before running full system
+      wp_count_ = 3;
       ROS_INFO("TURNING OFF EXPLORE MODE");
       runExplore = false; 
       std_srvs::SetBool srv;
